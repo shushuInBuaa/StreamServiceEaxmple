@@ -3,9 +3,11 @@ package BUAA.StreamServiceExample;
 import static spark.Spark.get;
 
 import java.io.BufferedReader;
+import java.io.FileReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.util.HashMap;
+import java.util.Properties;
 
 
 
@@ -15,16 +17,19 @@ import java.util.HashMap;
  */
 public class App 
 {
-	public static HashMap<String, String> properties=new HashMap<>(); 
+	public static Properties properties=new Properties();
     public static void main( String[] args )
     {
         System.out.println( "Hello World!" );
-    	get("/:time/:ID/:result",(req,res)->{
+    	get("/:time/:ID/:resultReturnURL/:resultKafkaURL/:resultTopic",(req,res)->{
+    		System.out.println("----------using service-----------");
 			String time=req.params(":time");
 			String ID=req.params(":ID");
 			String result=req.params(":resultReturnURL");
+			String resultKafkaURL=req.params(":resultKafkaURL");
+			String resultTopic=req.params(":resultTopic");
 			
-			init(Long.parseLong(time),ID,result);
+			init(Long.parseLong(time),ID,result,resultKafkaURL,resultTopic);
 			
 			
 			return "I'm wang"+time+ID+result;
@@ -32,24 +37,30 @@ public class App
     	
     	System.out.println(System.getProperty("user.dir"));
     	
-    	//init();
     }
     
-    public static void init(long time,String ID, String resultReturnURL)
+    public static void init(long time,String ID, String resultReturnURL,String resultKafkaURL, String resultTopic)
     {
     	try {  
     		//read properties
     		
-    		properties.put("topologyName","domain");
-    		properties.put("jarPath","/bin/DomainNameFilter-0.1.jar");
-    		properties.put("mainClass","shushu.DomainNameFilter.TopologyMain");
-    		properties.put("parameters","/usr/local/shushu-storm/domain.log");//Õâ¸öÒª¸Ä³ÉÊı¾İÔ´dataSource1¡¢dataSource2¡£¡£¡£ÔÚÅäÖÃÎÄ¼şÖĞdataSource·ÖÎªkafkaURLºÍtopicÁ½²¿·Ö
-    		properties.put("resultkafkaURL", "lll");
-    		properties.put("resultTopic", "hello");//Õâ¸ötopicĞèÒª×Ô¶¯Éú³É
+    		BufferedReader bf=new BufferedReader(new FileReader(System.getProperty("user.dir")+"/config.properties"));
+    		
+    		
+    		properties.load(bf);
+    		
+    		//properties.put("topologyName","domain");
+    		//properties.put("jarPath","/bin/DomainNameFilter-0.1.jar");
+    		//properties.put("mainClass","shushu.DomainNameFilter.TopologyMain");
+    		//properties.put("parameters","/usr/local/shushu-storm/domain.log");//ï¿½ï¿½ï¿½Òªï¿½Ä³ï¿½ï¿½ï¿½ï¿½ï¿½Ô´dataSource1ï¿½ï¿½dataSource2ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ä¼ï¿½ï¿½ï¿½dataSourceï¿½ï¿½ÎªkafkaURLï¿½ï¿½topicï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
+    		//the following properties are available in services with parameters specified by users
+    		//properties.put("resultkafkaURL", "lll");
+    		//properties.put("resultTopic", "hello");
             
-    		initStorm();
-    		Thread resultCollectionThread=initResultCollection(ID, resultReturnURL);
-    		initThreadTimer(resultCollectionThread, time);
+    		//initiate in three processes
+    		//initStorm();
+    		Thread resultCollectionThread=initResultCollection(ID, resultReturnURL,resultKafkaURL, resultTopic);
+    		initTimer(resultCollectionThread, time);
     		
             
             
@@ -63,6 +74,7 @@ public class App
     
     public static void initStorm() throws IOException, InterruptedException
     {
+    	System.out.println("----------init storm-----------");
     	String[] cmd = new String[] { "/bin/sh", "-c", "storm list" };  
         Process ps = Runtime.getRuntime().exec(cmd);  
 
@@ -85,6 +97,14 @@ public class App
 
         	}
         }  
+                
+        //æ›´æ”¹stormæ‰§è¡Œè¯­å¥ï¼Œæ·»åŠ æ•°æ®æºå‚æ•°
+        //
+        //
+        //
+        //
+        //
+        
         System.out.println("storm jar "+System.getProperty("user.dir")+properties.get("jarPath")+" "+properties.get("mainClass")+" "+properties.get("parameters"));
         ps=Runtime.getRuntime().exec(new String[]{"/bin/sh","-c" ,"storm jar "+System.getProperty("user.dir")+properties.get("jarPath")+" "+properties.get("mainClass")+" "+properties.get("parameters")});
         ps.waitFor();
@@ -95,9 +115,10 @@ public class App
         }  
     }
     
-    public static Thread initResultCollection(String ID, String resultReturnURL)
+    public static Thread initResultCollection(String ID, String resultReturnURL, String resultKafkaURL, String resultTopic)
     {
-    	ResultCollection resultCollection=new ResultCollection(properties.get("resultkafkaURL"),properties.get("resultTopic"));
+    	System.out.println("----------init result collection-----------");
+    	ResultCollection resultCollection=new ResultCollection(resultKafkaURL,resultTopic,ID, resultReturnURL);
     	Thread thread=new Thread(resultCollection);
     	thread.start();
     	return thread;
@@ -105,7 +126,8 @@ public class App
     
     public static void initTimer(Thread resultCollectionThread, long time)
     {
+    	System.out.println("----------init timer-----------");
     	ThreadTimer timer=new ThreadTimer(resultCollectionThread, time);
-    	
+    	timer.run();
     }
 }
